@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "jigsaw-puzzle-utils"
+version = "0.1.0"
+description = ""
+authors = ["Kan Kawabata <kkawabat@asu.edu>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+opencv-python = "^4.11.0.86"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
