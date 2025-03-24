@@ -22,14 +22,12 @@ class EdgeFinder:
         """given an image of puzzle pieces generate another image of edge pieces highlight"""
 
         threshold_img = self.run_threshold()
-
-        cv2.imshow('threshold_img', threshold_img)
         contours = self.get_contours(threshold_img)
 
 
         cv2.drawContours(self.raw_img, contours, -1, (0, 255, 0), 2)
         cv2.imshow('Image with Contours', self.raw_img)
-
+        cv2.imwrite(output_path, self.raw_img)
 
         cv.waitKey(0)  # Wait for a keystroke in the window
         cv2.destroyAllWindows()
@@ -39,6 +37,8 @@ class EdgeFinder:
         """press `a` to add another mask, `r` to reset, `q` to finish"""
         self.temp_img = self.quantize_color(self.raw_img)
         cur_img = self.temp_img
+        cv2.namedWindow('image', cv2.WINDOW_KEEPRATIO)
+        cv2.namedWindow('threshold_map', cv2.WINDOW_KEEPRATIO)
         cv.imshow("image", cur_img)
         cv2.createTrackbar('HMin', 'image', 0, 179, nothing)
         cv2.createTrackbar('HMax', 'image', 0, 179, nothing)
@@ -86,6 +86,7 @@ class EdgeFinder:
             elif cv2.waitKey(10) & 0xFF == ord('r'):
                 cv.imshow("image", self.temp_img)
                 cur_img = self.temp_img
+                print('reset')
 
     def set_threshold(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -112,6 +113,7 @@ class EdgeFinder:
         quantized_saturation = image_hsv[:, :, 1] // (256 // saturation_bins) * (256 // saturation_bins)
         quantized_value = image_hsv[:, :, 2] // (256 // value_bins) * (256 // value_bins)
         quantized_hsv = np.stack([quantized_hue, quantized_saturation, quantized_value], axis=-1).astype(np.uint8)
+        quantized_hsv = cv2.medianBlur(quantized_hsv, 11)
         return quantized_hsv
 
 
@@ -119,7 +121,35 @@ class EdgeFinder:
         kernel = np.ones((5, 5), np.uint8)
         mask_cleaned = cv2.morphologyEx(threshold_img, cv2.MORPH_CLOSE, kernel, iterations=2)
         contours, _ = cv2.findContours(mask_cleaned, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        return contours
+
+        cv2.namedWindow('contour_image', cv2.WINDOW_KEEPRATIO)
+
+        cv2.createTrackbar('HMin', 'contour_image', 0, threshold_img.shape[0], nothing)
+        cv2.createTrackbar('HMax', 'contour_image', 0, threshold_img.shape[0], nothing)
+        cv2.createTrackbar('WMin', 'contour_image', 0, threshold_img.shape[1], nothing)
+        cv2.createTrackbar('WMax', 'contour_image', 0, threshold_img.shape[1], nothing)
+
+        while True:
+            hMin = cv2.getTrackbarPos('HMin', 'contour_image')
+            hMax = cv2.getTrackbarPos('HMax', 'contour_image')
+            wMin = cv2.getTrackbarPos('WMin', 'contour_image')
+            wMax = cv2.getTrackbarPos('WMax', 'contour_image')
+
+            filtered_contour = []
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+
+                # Keep only large enough objects
+                if wMax > w > wMin and hMax > h > hMin:
+                    filtered_contour.append(contour)
+
+            contour_img = self.raw_img.copy()
+            cv2.drawContours(contour_img, filtered_contour, -1, (0, 255, 0), 2)
+            cv2.imshow('contour_image', contour_img)
+
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                cv2.destroyWindow('contour_image')
+                return filtered_contour
 
 
 if __name__ == '__main__':
