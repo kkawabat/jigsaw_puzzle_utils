@@ -14,35 +14,28 @@ def nothing(x):
 
 class EdgeFinder:
     def __init__(self, input_path):
-        self.input_path = input_path,
-        self.raw_img = cv.imread(input_path)
-        self.img_hsv = cv2.cvtColor(self.raw_img, cv2.COLOR_BGR2HSV)
-        self.temp_img = None
+        self.input_path = input_path
+        self.raw_img = None
+        self.img_hsv = None
+        self.quantized_img = None
         self.threshold_img = None
         self.contours = None
         self.labeled_pieces_img = None
+        self.contour_img = None
 
-    def generate_edge_highlights(self, output_path):
+    def run(self):
         """given an image of puzzle pieces generate another image of edge pieces highlight"""
-
+        self.raw_img = cv.imread(self.input_path)
+        self.img_hsv = cv2.cvtColor(self.raw_img, cv2.COLOR_BGR2HSV)
         self.threshold_img = self.run_threshold()
         self.contours = self.get_contours(self.threshold_img)
-        self.labeled_pieces_img = self.label_pieces(self.threshold_img.shape[1], self.threshold_img.shape[0], contours)
-        cv2.drawContours(self.raw_img, self.contours, -1, (0, 255, 0), 2)
-        cv2.namedWindow('Image with Contours', cv2.WINDOW_KEEPRATIO)
-        cv2.imshow('Image with Contours', self.raw_img)
-        cv2.imwrite(output_path, self.raw_img)
-
-        cv.waitKey(0)  # Wait for a keystroke in the window
-        cv2.destroyAllWindows()
-        self.save(output_path)
+        self.labeled_pieces_img = self.label_pieces(self.threshold_img.shape[1], self.threshold_img.shape[0], self.contours)
 
 
     def run_threshold(self ):
         """press `a` to add another mask, `r` to reset, `q` to finish"""
-        self.temp_img = self.quantize_color(self.raw_img)
-        cur_img = self.temp_img
-
+        self.quantized_img = self.quantize_color(self.raw_img)
+        cur_img = self.quantized_img
 
         cv2.namedWindow('image', cv2.WINDOW_KEEPRATIO)
         cv2.namedWindow('threshold_map', cv2.WINDOW_KEEPRATIO)
@@ -75,8 +68,8 @@ class EdgeFinder:
 
             cv2.imshow('threshold_map', result)
             cv2.moveWindow("threshold_map", 1000, 0)
-
-            if cv2.waitKey(10) & 0xFF == ord('q'):
+            key = cv2.waitKey(10) & 0xFF
+            if key == ord('q'):
                 cv2.destroyWindow('image')
                 cv2.destroyWindow('threshold_map')
 
@@ -86,23 +79,23 @@ class EdgeFinder:
                 kernel = np.ones((5, 5), np.uint8)
                 mask_cleaned = cv2.morphologyEx(threshold_img_grey, cv2.MORPH_CLOSE, kernel, iterations=2)
                 return mask_cleaned
-            elif cv2.waitKey(10) & 0xFF == ord('a'):
+            elif key == ord('a'):
                 cv.imshow("image", result)
                 cur_img = result
                 print('saved')
-            elif cv2.waitKey(10) & 0xFF == ord('r'):
-                cv.imshow("image", self.temp_img)
-                cur_img = self.temp_img
+            elif key == ord('r'):
+                cv.imshow("image", self.quantized_img)
+                cur_img = self.quantized_img
                 print('reset')
 
     def set_threshold(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             print(f"Clicked at coordinates: ({x}, {y})")
-            if self.temp_img.shape[0] < y or self.temp_img.shape[1] < x:
+            if self.quantized_img.shape[0] < y or self.quantized_img.shape[1] < x:
                 print('skipped')
                 return
 
-            selected_hsv = self.temp_img[y, x, :]
+            selected_hsv = self.quantized_img[y, x, :]
             cv2.setTrackbarPos('HMin', 'image', max(int(selected_hsv[0]) - 10, 0))
             cv2.setTrackbarPos('HMax', 'image', min(int(selected_hsv[0]) + 10, 179))
             cv2.setTrackbarPos('SMin', 'image', max(int(selected_hsv[1]) - 10, 0))
@@ -167,9 +160,6 @@ class EdgeFinder:
 
         blank_img = org_blank_img.copy()
         cv2.drawContours(blank_img, [np.array(c) for c in contours[0::2]], -1, (0, 255, 0), 2)
-        cv2.namedWindow('contour_image', cv2.WINDOW_KEEPRATIO)
-        cv2.imshow('contour_image', blank_img)
-
         img = cv2.cvtColor(blank_img, cv2.COLOR_BGR2RGB)
 
         for i, c in enumerate(contours):
@@ -183,9 +173,10 @@ class EdgeFinder:
         return img
 
     def save(self, output_path):
-        cv2.imwrite(output_path, self.raw_img)
-        cv2.imwrite(output_path.replace('.jpg', '_theshold.jpg'), self.threshold_img)
-        cv2.imwrite(output_path.replace('.jpg', '_labeled_pieces.jpg'), self.labeled_pieces_img)
+        cv2.imwrite(join(output_path, 'origin.jpg'), self.raw_img)
+        cv2.imwrite(join(output_path, 'quantized.jpg'), self.quantized_img)
+        cv2.imwrite(join(output_path, 'threshold.jpg'), self.threshold_img)
+        cv2.imwrite(join(output_path, 'labeled_pieces.jpg'), self.labeled_pieces_img)
 
         class NumpyEncoder(json.JSONEncoder):
             def default(self, obj):
@@ -193,39 +184,33 @@ class EdgeFinder:
                     return obj.tolist()
                 return super().default(obj)
 
-        with open(output_path.replace('.jpg', '_contours.json'), 'w') as ifile:
+        with open(join(output_path, 'contours.json'), 'w') as ofile:
             json.dump({"contours": self.contours,
                        "height": self.threshold_img.shape[1],
-                       "width": self.threshold_img.shape[0]}, ifile, cls=NumpyEncoder)
+                       "width": self.threshold_img.shape[0]}, ofile, cls=NumpyEncoder)
+        pass
+
+    @classmethod
+    def load(cls, input_path):
+        ef = cls(input_path)
+        ef.raw_img = cv2.imread(join(input_path, 'origin.jpg'))
+        ef.quantized_img = cv2.imread(join(input_path, 'quantized.jpg'))
+        ef.threshold_img = cv2.imread(join(input_path, 'threshold.jpg'))
+        ef.labeled_pieces_img = cv2.imread(join(input_path, 'labeled_pieces.jpg'))
+
+        with open(join(input_path, 'contours.json'), 'r') as ifile:
+            data_dict = json.load(ifile)
+        ef.contours = [np.array(c) for c in data_dict['contours']]
+        return ef
 
 if __name__ == '__main__':
     DATA_DIR = join(dirname(dirname(abspath(jigsaw_puzzle_utils.__file__))), "tests", 'data')
     _input_path = join(DATA_DIR, 'sample_pieces.jpg')
     _output_path = join(DATA_DIR, 'edge_highlights.jpg')
 
-    with open(_output_path.replace('.jpg', '_contours.json'), 'r') as ifile:
-        contour_dict = json.load(ifile)
-        contours = contour_dict['contours']
-        height, width = contour_dict['height'], contour_dict['width']
+    # ef = EdgeFinder(_input_path)
+    # ef.run()
+    # ef.save(DATA_DIR)
 
-    ef = EdgeFinder(_input_path)
-    img = ef.label_pieces(height, width, contours)
-
-    cv2.namedWindow('labeled_pieces', cv2.WINDOW_KEEPRATIO)
-    cv2.imshow('labeled_pieces', img)
-
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    contour = np.array(contours[821])
-    epsilon = 0.02 * cv2.arcLength(np.array(contour), True)  # Adjust for more/less simplification
-    approx = cv2.approxPolyDP(contour, epsilon, True)
-
-    org_blank_img = np.zeros((width, height, 3), dtype=np.uint8)
-    cv2.drawContours(org_blank_img, [contour], -1, (0, 255, 0), 2)
-    cv2.namedWindow('approx', cv2.WINDOW_KEEPRATIO)
-    cv2.imshow('approx', org_blank_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    ef = EdgeFinder.load(DATA_DIR)
     pass
-    # ef.generate_edge_highlights(_output_path)
