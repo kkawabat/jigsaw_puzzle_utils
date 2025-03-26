@@ -7,6 +7,8 @@ from os.path import join, abspath, dirname
 import numpy as np
 
 import jigsaw_puzzle_utils
+from jigsaw_puzzle_utils.jigsaw import Jigsaw
+
 
 def nothing(x):
     pass
@@ -172,6 +174,21 @@ class EdgeFinder:
 
         return img
 
+    def process_jigsaws(self):
+        # for c in self.contours:
+        #     j = Jigsaw(c)
+        #     j.analyze()
+        #     j.plot()
+        self.contours[0]
+        j = Jigsaw(self.contours[0])
+        j.analyze()
+        j.plot()
+
+        self.contours[821]
+        j = Jigsaw(self.contours[821])
+        j.analyze()
+        j.plot()
+
     def save(self, output_path):
         cv2.imwrite(join(output_path, 'origin.jpg'), self.raw_img)
         cv2.imwrite(join(output_path, 'quantized.jpg'), self.quantized_img)
@@ -213,4 +230,5 @@ if __name__ == '__main__':
     # ef.save(DATA_DIR)
 
     ef = EdgeFinder.load(DATA_DIR)
+    ef.process_jigsaws()
     pass
