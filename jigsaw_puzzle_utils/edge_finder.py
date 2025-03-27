@@ -157,6 +157,49 @@ class EdgeFinder:
                 cv2.destroyWindow('contour_image')
                 return filtered_contour
 
+    def refine_contours(self):
+        for cnt in self.contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            x_min = max(int(x - w * .1), 0)
+            y_min = max(int(y - h * .1), 0)
+            x_max = min(int(x_min + w * 1.2), self.raw_img.shape[1])
+            y_max = min(int(y_min + h * 1.2), self.raw_img.shape[0])
+            temp_img = self.raw_img[y_min:y_max, x_min:x_max].copy()
+
+            kernel = np.ones((3, 3), np.uint8)
+
+            mask_cleaned = cv2.morphologyEx(temp_img, cv2.MORPH_OPEN, kernel, iterations=1)
+            mask_cleaned = cv2.morphologyEx(mask_cleaned, cv2.MORPH_CLOSE, kernel, iterations=4)
+            dilated = cv2.dilate(mask_cleaned, kernel, iterations=1)
+            gradient = cv2.morphologyEx(temp_img, cv2.MORPH_GRADIENT, kernel)
+            edges = cv.Canny(gradient, 50, 150)
+
+            contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            closed_contours = []
+            for cnt in contours:
+                x, y, _w, _h = cv2.boundingRect(cnt)
+                if len(cnt) < 20:
+                    continue
+
+                # if the size of the contour is way smaller than the original contour
+                if _w * _h < (w * h) * .5:
+                    continue
+
+                # if the ends of the contour is further than half the dimension then it's probably not a closed loop
+                if np.linalg.norm(cnt[0] - cnt[-1]) > max(w, h) * .5:
+                    continue
+                closed_contours.append(cnt)
+
+            img_edge = temp_img.copy()
+            cv2.drawContours(img_edge, closed_contours, -1, (0, 255, 0), 2)
+            cv2.imshow('Cropped Image', img_edge)
+            cv2.imshow('Cropped Image2', edges)
+            cv2.imshow('Cropped Image3', temp_img)
+            cv2.imshow('mask_clean', dilated)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        pass
+
     def label_pieces(self, height, width, contours):
         org_blank_img = np.zeros((width, height, 3), dtype=np.uint8)
 
@@ -219,16 +262,3 @@ class EdgeFinder:
             data_dict = json.load(ifile)
         ef.contours = [np.array(c) for c in data_dict['contours']]
         return ef
-
-if __name__ == '__main__':
-    DATA_DIR = join(dirname(dirname(abspath(jigsaw_puzzle_utils.__file__))), "tests", 'data')
-    _input_path = join(DATA_DIR, 'sample_pieces.jpg')
-    _output_path = join(DATA_DIR, 'edge_highlights.jpg')
-
-    # ef = EdgeFinder(_input_path)
-    # ef.run()
-    # ef.save(DATA_DIR)
-
-    ef = EdgeFinder.load(DATA_DIR)
-    ef.process_jigsaws()
-    pass
