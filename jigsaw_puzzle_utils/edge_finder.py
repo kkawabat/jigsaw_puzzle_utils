@@ -164,38 +164,34 @@ class EdgeFinder:
             y_min = max(int(y - h * .1), 0)
             x_max = min(int(x_min + w * 1.2), self.raw_img.shape[1])
             y_max = min(int(y_min + h * 1.2), self.raw_img.shape[0])
-            temp_img = self.raw_img[y_min:y_max, x_min:x_max].copy()
+            cropped_img = self.raw_img[y_min:y_max, x_min:x_max].copy()
 
             kernel = np.ones((3, 3), np.uint8)
-
-            mask_cleaned = cv2.morphologyEx(temp_img, cv2.MORPH_OPEN, kernel, iterations=1)
-            mask_cleaned = cv2.morphologyEx(mask_cleaned, cv2.MORPH_CLOSE, kernel, iterations=4)
+            mask_cleaned = cv2.morphologyEx(cropped_img, cv2.MORPH_OPEN, kernel, iterations=1)
             dilated = cv2.dilate(mask_cleaned, kernel, iterations=1)
-            gradient = cv2.morphologyEx(temp_img, cv2.MORPH_GRADIENT, kernel)
-            edges = cv.Canny(gradient, 50, 150)
+            gradient = cv2.morphologyEx(dilated, cv2.MORPH_GRADIENT, kernel)
+            gradient_hsv = cv2.cvtColor(gradient, cv2.COLOR_BGR2HSV)
 
+            edges = cv.Canny(gradient_hsv[:, :, 2], 50, 150)
             contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            closed_contours = []
-            for cnt in contours:
-                x, y, _w, _h = cv2.boundingRect(cnt)
-                if len(cnt) < 20:
-                    continue
+            filtered_contours = self.custom_contour_filter(contours, w, h)
+            v2 = cropped_img * 0
+            cv2.drawContours(v2, contours, -1, (0, 255, 0), 1)
 
-                # if the size of the contour is way smaller than the original contour
-                if _w * _h < (w * h) * .5:
-                    continue
+            v3 = cropped_img * 0
+            kernel = np.ones((5, 5), np.uint8)
+            closed = cv2.morphologyEx(v2, cv2.MORPH_CLOSE, kernel)
+            # cv2.drawContours(v3, approx_contour, -1, (0, 255, 0), 1)
 
-                # if the ends of the contour is further than half the dimension then it's probably not a closed loop
-                if np.linalg.norm(cnt[0] - cnt[-1]) > max(w, h) * .5:
-                    continue
-                closed_contours.append(cnt)
+            img_edge = cropped_img.copy()
+            cv2.drawContours(img_edge, filtered_contours, -1, (0, 255, 0), 2)
 
-            img_edge = temp_img.copy()
-            cv2.drawContours(img_edge, closed_contours, -1, (0, 255, 0), 2)
-            cv2.imshow('Cropped Image', img_edge)
-            cv2.imshow('Cropped Image2', edges)
-            cv2.imshow('Cropped Image3', temp_img)
-            cv2.imshow('mask_clean', dilated)
+            cv2.imshow('cropped_img', cropped_img)
+            cv2.imshow('gradient_v', gradient_hsv[:,:,2])
+            cv2.imshow('edges', edges)
+            cv2.imshow('img_edge', img_edge)
+            cv2.imshow('v2', v2)
+            cv2.imshow('v3', closed)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
         pass
@@ -216,6 +212,27 @@ class EdgeFinder:
             cv2.putText(img, str(i), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 1, cv2.LINE_AA)
 
         return img
+
+    def custom_contour_filter(self, contours, w, h):
+        """
+        filter rule from heuristics
+        - filter contours with too little points
+        - filter contours if the size of the contour is way smaller than the original contour
+        - filter contours if the ends of the contour is further than half the dimension (it's probably not a closed loop)
+        """
+        filtered_contours = []
+        for cnt in contours:
+            x, y, _w, _h = cv2.boundingRect(cnt)
+            if len(cnt) < 20:
+                continue
+
+            if _w * _h < (w * h) * .5:
+                continue
+
+            if np.linalg.norm(cnt[0] - cnt[-1]) > max(w, h) * .5:
+                continue
+            filtered_contours.append(cnt)
+        return filtered_contours
 
     def process_jigsaws(self):
         # for c in self.contours:
