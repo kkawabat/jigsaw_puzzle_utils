@@ -14,3 +14,18 @@ However, after trying to assemble it for a few hours I realized this was more di
 
 - install python 3.11 + poetry
 - run `poetry install`
+
+
+## notes & insights
+- things that messes up the contour detection
+  - touching pieces
+  - noisy background (ended up buying a green board)
+  - image on the pieces (flip over to the back of the pieces so that the pieces are blanks)
+  - shadow of the pieces (having an angled light source adds shadows on the opposite side)
+  - distance/angle of the image (further pieces are smaller, angling distorts the shape, you need to account for that)
+
+
+## additional references
+- initial video i saw [link](https://www.youtube.com/watch?v=WsPHBD5NsS0)
+- found this medium article [link](https://medium.com/data-science/solving-jigsaw-puzzles-with-python-and-opencv-d775ba730660)
+- Interesting video that uses peak detector on distance/angle from center to find the corners [link](https://www.youtube.com/watch?v=Bo0RSxt5ECI&ab_channel=RujutaVaze)
